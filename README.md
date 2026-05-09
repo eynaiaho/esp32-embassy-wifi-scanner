@@ -2,64 +2,64 @@
 
 `no_std` · `Embassy` · `esp-hal` · `Rust`
 
-Rust ile yazılmış, ESP32 üzerinde çalışan async WiFi tarayıcı ve izleme uygulaması. Embassy executor kullanarak eş zamanlı görevlerle WiFi ağlarını tarar ve UART üzerinden seri porta çıktı verir.
+An async WiFi scanner and monitor application running on ESP32, written in Rust. Scans for nearby WiFi networks using concurrent Embassy tasks and outputs results via UART.
 
 ---
 
-## Özellikler
+## Features
 
-- **Async/await** > tabanlı görev yönetimi (Embassy executor)
-- **WiFi tarama** > Çevredeki ağları periyodik olarak tarar ve SSID'leri listeler
-- **WiFi izleme** > Bağlantı durumunu kontrol eder, kopması durumunda otomatik yeniden başlatır
-- **UART çıktısı** > Tüm durum mesajları 115200 baud üzerinden seri porta yazılır
-- **Mutex koruması** > WiFi ve UART kaynakları görevler arasında `NoopRawMutex` ile paylaşılır
-- **`no_std`** > Standart kütüphane kullanılmaz; gömülü sistem için optimize edilmiştir
+- **Async/await** > based task management (Embassy executor)
+- **WiFi scanning** > Periodically scans for nearby networks and lists SSIDs
+- **WiFi monitoring** > Checks connection state and automatically restarts if it drops
+- **UART output** > All status messages are written to serial at 115200 baud
+- **Mutex protection** > WiFi and UART resources are shared between tasks via `NoopRawMutex`
+- **`no_std`** > No standard library; optimized for embedded systems
 
 ---
 
-## Görevler
+## Tasks
 
-| Görev | Açıklama | Periyot |
+| Task | Description | Interval |
 |---|---|---|
-| `wifi_is_active` | WiFi durumunu kontrol eder, pasifse yeniden başlatır | 5 saniye |
-| `wifi_scanner` | En fazla 5 ağ tarar, SSID'leri UART'a yazar | 10 saniye |
-| `main` loop | Ana döngü — sistemin çalıştığını bildirir | 1 saniye |
+| `wifi_is_active` | Checks WiFi state, restarts it if inactive | 5 seconds |
+| `wifi_scanner` | Scans up to 5 networks and prints SSIDs over UART | 10 seconds |
+| `main` loop | Main loop — signals that the system is running | 1 second |
 
 ---
 
-## Bağımlılıklar
+## Dependencies
 
-| Kütüphane | Amaç |
+| Crate | Purpose |
 |---|---|
-| `esp-hal` | ESP32 donanım soyutlama katmanı |
-| `embassy-executor` | Async görev yöneticisi |
-| `embassy-time` | Asenkron zamanlayıcı |
-| `embassy-sync` | Mutex ve senkronizasyon primitifleri |
-| `esp-radio` | WiFi/BLE kontrolcüsü |
-| `esp-alloc` | Heap bellek ayırıcı |
+| `esp-hal` | ESP32 hardware abstraction layer |
+| `embassy-executor` | Async task executor |
+| `embassy-time` | Async timer |
+| `embassy-sync` | Mutex and synchronization primitives |
+| `esp-radio` | WiFi/BLE controller |
+| `esp-alloc` | Heap allocator |
 | `esp-rtos` | RTOS runtime |
-| `esp-bootloader-esp-idf` | Bootloader entegrasyonu |
-| `heapless` | Stack üzerinde sabit boyutlu veri yapıları |
-| `static-cell` | Statik ömürlü değişken başlatıcı |
+| `esp-bootloader-esp-idf` | Bootloader integration |
+| `heapless` | Fixed-size data structures on the stack |
+| `static-cell` | Static lifetime variable initializer |
 
 ---
 
-## Derleme ve Yükleme
+## Build & Flash
 
-> Önce [espup](https://github.com/esp-rs/espup) ve Rust ESP toolchain kurulu olmalıdır.
+> Requires [espup](https://github.com/esp-rs/espup) and the Rust ESP toolchain to be installed first.
 
 ```bash
-# Toolchain kurulumu (bir kez yapılır)
+# Install toolchain (once)
 espup install
 
-# Projeyi derle
+# Build the project
 cargo build --release
 
-# ESP32'ye yükle (espflash gerekli)
+# Flash to ESP32 (requires espflash)
 cargo run --release
 ```
 
-Seri port çıktısını izlemek için:
+To monitor serial output:
 
 ```bash
 espflash monitor
@@ -67,42 +67,42 @@ espflash monitor
 
 ---
 
-## 🖥️ Örnek UART Çıktısı
+## Example UART Output
 
 ```
-Dongu calisiyor.
-WiFi calisiyor.
-SSID: Ev_Wifi
-SSID: Komsu_Net
+Loop running.
+WiFi is active.
+SSID: Home_Wifi
+SSID: Neighbor_Net
 SSID: AndroidAP
-WiFi calisiyor.
-Dongu calisiyor.
+WiFi is active.
+Loop running.
 ```
 
 ---
 
-## Mimari
+## Architecture
 
 ```
 main()
- ├── UART mutex başlatılıyor
+ ├── UART mutex initialized
  ├── Heap allocator (98KB + 72KB)
- ├── WiFi controller başlatılıyor (Client modu)
- ├── WiFi mutex başlatılıyor
- ├── [task] wifi_is_active  →  her 5s bağlantı kontrolü
- └── [task] wifi_scanner    →  her 10s ağ taraması
+ ├── WiFi controller initialized (Client mode)
+ ├── WiFi mutex initialized
+ ├── [task] wifi_is_active  →  connection check every 5s
+ └── [task] wifi_scanner    →  network scan every 10s
 ```
 
 ---
 
-## Dikkat Edilmesi Gerekenler
+## Notes
 
-- Panic handler boş bir döngüye girer (`loop {}`); production için log veya reset mekanizması eklenebilir.
-- `scan_with_config` senkron bir çağrıdır — uzun tarama sürelerinde diğer görevler gecikebilir.
-- Her iki görev de aynı anda mutex bekleyebileceğinden kilitlenme (deadlock) riskine dikkat edilmelidir. Mevcut kodda her görev önce WiFi, sonra UART mutex'ini alıyor; bu sıranın tutarlı tutulması önemlidir.
+- The panic handler enters an empty loop (`loop {}`); consider adding a log or reset mechanism for production use.
+- `scan_with_config` is a blocking call — other tasks may be delayed during long scans.
+- Both tasks acquire mutexes in the same order (WiFi first, then UART); this ordering must stay consistent to avoid deadlocks.
 
 ---
 
-## Lisans
+## License
 
 MIT
